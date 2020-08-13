@@ -19,8 +19,8 @@ sub after_request {
         $ENV{LWP_USERAGENT_PLUGIN_RETRY_DELAY}        // 2;
 
     my $should_retry = 0;
-    if (($r->{config}{retry_client_errors} // 0) && $r->{response}->status !~ /\A4/) { $should_retry++ }
-    if (($r->{config}{retry_server_errors} // 1) && $r->{response}->status !~ /\A5/) { $should_retry++ }
+    if (($r->{config}{retry_client_errors} // 0) && $r->{response}->code =~ /\A4/) { $should_retry++ }
+    if (($r->{config}{retry_server_errors} // 1) && $r->{response}->code =~ /\A5/) { $should_retry++ }
     return -1 unless $should_retry;
 
     $r->{retries} //= 0;
@@ -30,7 +30,7 @@ sub after_request {
     my ($ua, $request) = @{ $r->{argv} };
     log_trace "Failed requesting %s (%s - %s), retrying in %.1f second(s) (%d of %d) ...",
         $request->uri,
-        $r->{response}->status,
+        $r->{response}->code,
         $r->{response}->message,
         $r->{config}{delay},
         $r->{retries},
