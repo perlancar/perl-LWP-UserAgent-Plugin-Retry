@@ -18,7 +18,11 @@ sub after_request {
     $r->{config}{delay}        //=
         $ENV{LWP_USERAGENT_PLUGIN_RETRY_DELAY}        // 2;
 
-    return -1 if $r->{response}->status !~ /\A[5]/;
+    my $should_retry = 0;
+    if (($r->{config}{retry_client_errors} // 0) && $r->{response}->status !~ /\A4/) { $should_retry++ }
+    if (($r->{config}{retry_server_errors} // 1) && $r->{response}->status !~ /\A5/) { $should_retry++ }
+    return -1 unless $should_retry;
+
     $r->{retries} //= 0;
     return 0 if $r->{config}{max_attempts} &&
         $r->{retries} >= $r->{config}{max_attempts};
@@ -36,7 +40,7 @@ sub after_request {
 }
 
 1;
-# ABSTRACT: Retry failed request
+# ABSTRACT: Retry failed requests
 
 =for Pod::Coverage .+
 
@@ -67,6 +71,15 @@ Int.
 =head2 delay
 
 Float.
+
+=head2 retry_client_errors
+
+Bool, default 0. Whether 4xx errors should be retried.
+
+=head2 retry_server_errors
+
+Bool, default 1. Whether 5xx errors should be retried.
+
 
 =head1 ENVIRONMENT
 
