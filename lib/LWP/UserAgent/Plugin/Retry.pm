@@ -1,6 +1,8 @@
 package LWP::UserAgent::Plugin::Retry;
 
+# AUTHORITY
 # DATE
+# DIST
 # VERSION
 
 use 5.010001;
