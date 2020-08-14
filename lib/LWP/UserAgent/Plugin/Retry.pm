@@ -94,11 +94,12 @@ Int.
 
 =head1 SEE ALSO
 
-L<LWP::UserAgent::Plugin::CustomRetry>
-
 L<LWP::UserAgent::Plugin>
+
+L<LWP::UserAgent::Plugin::CustomRetry> uses L<Algorithm::Backoff> to give you
+several retry delay strategies.
 
 Existing non-plugin solutions: L<LWP::UserAgent::Determined>,
 L<LWP::UserAgent::ExponentialBackoff>.
 
-L<HTTP::Tiny::Plugin::Retry>
+Equivalent plugin for L<HTTP::Tiny::Plugin>: L<HTTP::Tiny::Plugin::Retry>
