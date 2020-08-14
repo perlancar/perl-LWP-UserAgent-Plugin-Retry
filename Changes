@@ -1,4 +1,4 @@
-0.003   2020-08-14  Released-By: PERLANCAR; Urgency: medium
+0.003   2020-08-14  Released-By: PERLANCAR; Urgency: medium; Backward-Compatible: no
 
 	- [incompatible change] Synchronize features with
 	  HTTP::Tiny::Plugin::Retry: remove retry_{server,client}_errors
