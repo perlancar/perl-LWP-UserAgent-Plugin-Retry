@@ -13,31 +13,86 @@ use Log::ger;
 use Time::HiRes qw(sleep);
 
 sub after_request {
-    my ($self, $r) = @_;
+    my ($class, $r) = @_;
 
     $r->{config}{max_attempts} //=
         $ENV{LWP_USERAGENT_PLUGIN_RETRY_MAX_ATTEMPTS} // 3;
     $r->{config}{delay}        //=
         $ENV{LWP_USERAGENT_PLUGIN_RETRY_DELAY}        // 2;
+    if (defined $r->{config}{strategy}) {
+        require Module::Load::Util;
+        $r->{ua}{_backoff_obj} //=
+            Module::Load::Util::instantiate_class_with_optional_args(
+                {ns_prefix => 'Algorithm::Backoff'}, $r->{config}{strategy});
+    }
 
-    my $should_retry = 0;
-    if (($r->{config}{retry_client_errors} // 0) && $r->{response}->code =~ /\A4/) { $should_retry++ }
-    if (($r->{config}{retry_server_errors} // 1) && $r->{response}->code =~ /\A5/) { $should_retry++ }
-    return -1 unless $should_retry;
+    my $is_success;
+    my $code = $r->{response}->code;
+    if (defined $r->{config}{retry_if}) {
+        my $ref = ref $r->{config}{retry_if};
+        if ($ref eq 'Regexp' or !$ref) {
+            $is_success++ unless $code =~ $r->{config}{retry_if};
+        } elsif ($ref eq 'ARRAY') {
+            $is_success++ unless grep { $_ == $code } @{ $r->{config}{retry_if} };
+        } elsif ($ref eq 'CODE') {
+            $is_success++ unless $r->{config}{retry_if}->($class, $r);
+        } else {
+            die "Please supply a scalar/Regexp/arrayref/coderef retry_if";
+        }
+    } else {
+        $is_success++ if $code !~ /\A[5]/;
+    }
+
+  SUCCESS: {
+        last unless $is_success;
+        if ($r->{ua}{_backoff_obj}) {
+            my $delay_on_success = $r->{ua}{_backoff_obj}->success;
+            if ($delay_on_success > 0) {
+                log_trace "Delaying for %.1f second(s) after successful request", $delay_on_success;
+                sleep $delay_on_success;
+            }
+        }
+        return -1;
+    }
 
     $r->{retries} //= 0;
-    return 0 if $r->{config}{max_attempts} &&
-        $r->{retries} >= $r->{config}{max_attempts};
-    $r->{retries}++;
+    my $max_attempts;
+    my $delay;
+    my $should_give_up;
+    if ($r->{ua}{_backoff_obj}) {
+        $delay = $r->{ua}{_backoff_obj}->failure;
+        $should_give_up++ if $delay < 0;
+        $max_attempts = $r->{ua}{_backoff_obj}{max_attempts};
+    } else {
+        $should_give_up++ if $r->{config}{max_attempts} &&
+            $r->{retries} >= $r->{config}{max_attempts};
+        $max_attempts = $r->{config}{max_attempts};
+        $delay = $r->{config}{delay};
+    }
+
     my ($ua, $request) = @{ $r->{argv} };
-    log_trace "Failed requesting %s (%s - %s), retrying in %.1f second(s) (%d of %d) ...",
-        $request->uri,
+
+  GIVE_UP: {
+        last unless $should_give_up;
+        log_trace "Failed requesting %s %s (%s - %s), giving up",
+        $request->method,
+        $request->uri . "",
+        $r->{response}->code,
+        $r->{response}->message;
+        return 0;
+    }
+
+    $r->{retries}++;
+
+    log_trace "Failed requesting %s %s (%s - %s), retrying in %.1f second(s) (attempt %d of %d) ...",
+        $request->method,
+        $request->uri . "",
         $r->{response}->code,
         $r->{response}->message,
-        $r->{config}{delay},
-        $r->{retries},
-        $r->{config}{max_attempts};
-    sleep $r->{config}{delay};
+        $delay,
+        1+$r->{retries},
+        $max_attempts;
+    sleep $delay;
     98; # repeat request()
 }
 
@@ -74,14 +129,6 @@ Int.
 
 Float.
 
-=head2 retry_client_errors
-
-Bool, default 0. Whether 4xx errors should be retried.
-
-=head2 retry_server_errors
-
-Bool, default 1. Whether 5xx errors should be retried.
-
 
 =head1 ENVIRONMENT
 
@@ -97,9 +144,6 @@ Int.
 =head1 SEE ALSO
 
 L<LWP::UserAgent::Plugin>
-
-L<LWP::UserAgent::Plugin::CustomRetry> uses L<Algorithm::Backoff> to give you
-several retry delay strategies.
 
 Existing non-plugin solutions: L<LWP::UserAgent::Determined>,
 L<LWP::UserAgent::ExponentialBackoff>.
