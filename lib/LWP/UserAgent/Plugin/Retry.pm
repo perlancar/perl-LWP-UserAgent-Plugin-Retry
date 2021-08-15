@@ -109,7 +109,7 @@ sub after_request {
      retry_if     => qr/^[45]/, # optional, default is only 5xx errors are retried
  };
 
- my $res  = HTTP::Tiny::Plugin->new->get("http://www.example.com/");
+ my $res  = LWP::UserAgent::Plugin->new->get("http://www.example.com/");
 
 
 =head1 DESCRIPTION
